@@ -72,6 +72,8 @@ The reliability patterns in this system directly apply:
 - Explicit failure states → avoids silent failure  
 - Deterministic recovery → guarantees reproducibility  
 
+In production, this boundary is where most “correct-looking but wrong” outputs originate.
+
 This repository demonstrates how to control the **failure boundary between generation and validation**, which is the most critical layer in production LLM systems.
 
 ---
