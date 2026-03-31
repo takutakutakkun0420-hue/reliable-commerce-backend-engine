@@ -47,6 +47,35 @@ This is critical for:
 
 ---
 
+## Reliability in LLM Systems
+
+The same failure patterns apply to LLM-based systems.
+
+Typical production issue:
+
+LLM → structured output → validation → silent inconsistency
+
+The most critical failure is not model quality, but **validation drift** between:
+- narrative outputs (free text)
+- structured data (JSON / schema)
+
+This leads to:
+- logically inconsistent results
+- undetected errors (no exceptions)
+- gradual loss of system trust
+
+The reliability patterns in this system directly apply:
+
+- Idempotency → prevents duplicate generation loops  
+- Retry + backoff → stabilizes API/model failures  
+- Outbox pattern → ensures no lost generation events  
+- Explicit failure states → avoids silent failure  
+- Deterministic recovery → guarantees reproducibility  
+
+This repository demonstrates how to control the **failure boundary between generation and validation**, which is the most critical layer in production LLM systems.
+
+---
+
 ## Target Use Cases
 
 This system can be directly used in:
@@ -78,230 +107,3 @@ Client → API → DB (transaction)
         External Systems
                 ↓
                DB
-```
-
----
-
-### Key Design Principles
-
-* No Redis usage in request path
-* All state persisted in PostgreSQL
-* Retry handled at data layer (not memory)
-* Explicit terminal states (`completed`, `failed`, `dead_letter`)
-* Failure is treated as a **first-class design concern**
-
----
-
-## End-to-End Flow
-
-### Order Creation
-
-```
-POST /orders → 202 Accepted
-```
-
-**Transaction includes:**
-
-* orders
-* order_items
-* outbox_events
-* async_jobs
-* idempotency_records
-* audit_logs
-
----
-
-### Async Processing
-
-1. Publisher reads `outbox_events`
-2. Pushes to Redis queue
-3. Worker consumes queue
-4. Calls external connectors
-5. Updates order state
-
----
-
-### Recovery Behavior
-
-```
-Failure → Stored in DB → Retried → Completed or Dead Letter
-```
-
----
-
-## Failure Scenario Demo
-
-### Redis Outage Test
-
-```bash
-docker compose stop redis
-
-# Create order
-POST /orders → status = pending
-
-docker compose start redis
-
-# System recovers automatically
-GET /orders/{id} → completed
-```
-
----
-
-### What this proves
-
-* Outbox pattern works
-* Retry logic is correct
-* No data loss
-* Recovery is automatic
-* System is production-safe
-
----
-
-## Business Impact
-
-* Prevents revenue loss from message broker failure
-* Eliminates duplicate processing via idempotency
-* Guarantees eventual consistency
-* Reduces operational overhead (self-healing system)
-
----
-
-## Components
-
-### API
-
-* FastAPI
-* Idempotent endpoints
-* No dependency on Redis for request handling
-
-### Publisher
-
-* Outbox relay (DB → Redis)
-* Retry with exponential backoff
-* Dead-letter handling
-
-### Worker
-
-* Async job execution
-* Retry + failure classification
-* Idempotent processing
-
-### Scheduler / Watchdog
-
-* Detects stuck jobs
-* Requeues or fails safely
-* Ensures no indefinite processing state
-
-### Database
-
-* PostgreSQL
-* Fully durable state
-* Single transaction per request
-
----
-
-## How to run
-
-```bash
-docker compose up --build
-```
-
----
-
-## Quick Test
-
-```bash
-curl -X POST http://localhost:8000/orders \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: test" \
-  -d '{"items":[{"product_id":"sku-1","quantity":1}]}'
-```
-
----
-
-## Health & Metrics
-
-```bash
-GET /healthz   → liveness
-GET /readyz    → dependency checks
-GET /metrics   → Prometheus metrics
-```
-
----
-
-## Admin Recovery
-
-### Retry Outbox
-
-```
-POST /admin/outbox/{event_id}/retry
-```
-
-### Retry Job
-
-```
-POST /admin/jobs/{job_id}/retry
-```
-
----
-
-## Failure Scenarios Covered
-
-* Redis outage
-* Worker crash
-* Duplicate request
-* External API timeout
-* Validation failure
-* Stuck job recovery
-
----
-
-## Core Concept
-
-> This system does not assume things will work.
-> It guarantees correct behavior when they don’t.
-
----
-
-## Summary
-
-This is not a demo backend.
-
-This is a **production-grade reliability system** that:
-
-* survives failure
-* recovers automatically
-* guarantees data integrity
-
----
-
-## Value Proposition
-
-Most systems:
-
-```
-Work → Break → Manual fix
-```
-
-This system:
-
-```
-Work → Break → Recover automatically
-```
-
----
-
-## Final Note
-
-This system was designed with one principle:
-
-> "Design for failure, not for success."
-
----
-
-## License / Usage
-
-Production-ready reference implementation.
-Can be used as a foundation for any system requiring **strong reliability guarantees**.
-
----
